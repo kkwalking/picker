@@ -2,9 +2,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"image/color"
 	"math/rand"
+	"os"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -46,6 +48,15 @@ func main() {
 	display.Alignment = fyne.TextAlignCenter
 	display.TextSize = 32
 
+	students, err := loadStudentsFromFile()
+	if err == nil && len(students) > 0 {
+		fmt.Println("已从持久化文件加载名单")
+		display.Text = "名单已加载，可以开始点名"
+
+	} else {
+		fmt.Println("未找到持久化文件，请导入 Excel")
+	}
+
 	// 导入按钮（用默认按钮即可）
 	btnImport := widget.NewButton("导入名单", func() {
 		fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
@@ -72,6 +83,10 @@ func main() {
 					students = append(students, row[0])
 				}
 			}
+			// save to local file
+			if len(students) > 0 {
+				saveStudentsToFile(students)
+			}
 
 			dialog.ShowInformation("成功", fmt.Sprintf("导入成功，共 %d 名学生", len(students)), w)
 			display.Text = "名单已导入，可以开始点名"
@@ -93,26 +108,33 @@ func main() {
 		}
 
 		go func() {
-			total := 5 * time.Second
+			total := 7 * time.Second
 			start := time.Now()
 			interval := 50 * time.Millisecond
 
+			var luckyOne string
+
 			for time.Since(start) < total {
 				idx := rand.Intn(len(students))
-				name := students[idx]
+				luckyOne = students[idx]
 				// 更新 display（需要刷新）
-				display.Text = name
+				display.Text = luckyOne
 				display.TextSize = 32
 				display.TextStyle = fyne.TextStyle{Bold: false}
 				canvas.Refresh(display)
 
 				time.Sleep(interval)
-				if time.Since(start) > 3*time.Second {
+				duration := time.Since(start)
+				if duration > 3*time.Second && duration <= 4*time.Second {
 					interval += 30 * time.Millisecond
+				} else if duration > 4*time.Second && duration <= 5*time.Second {
+					interval += 50 * time.Millisecond
+				} else if duration > 5*time.Second {
+					interval += 70 * time.Millisecond
 				}
 			}
 
-			final := students[rand.Intn(len(students))]
+			final := luckyOne
 			display.Text = fmt.Sprintf("点到：%s", final)
 			display.TextSize = 36
 			display.TextStyle = fyne.TextStyle{Bold: true}
@@ -205,4 +227,26 @@ func newModernButton(text string, onClick func()) fyne.CanvasObject {
 	// ✅ 背景矩形控制大小，容器里放 label 和 tappable 区域
 	btnContainer := container.NewMax(rect, container.NewCenter(label), tRect)
 	return btnContainer
+}
+
+var persistFile = "students.json"
+
+// 保存名单到 JSON 文件
+func saveStudentsToFile(names []string) error {
+	data, err := json.MarshalIndent(names, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(persistFile, data, 0644)
+}
+
+// 从 JSON 文件读取名单
+func loadStudentsFromFile() ([]string, error) {
+	data, err := os.ReadFile(persistFile)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	err = json.Unmarshal(data, &names)
+	return names, err
 }
