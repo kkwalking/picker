@@ -1,4 +1,4 @@
-module github.com/kkwalking/picker-v2
+module github.com/kkwalking/picker
 
 go 1.24.2
 
